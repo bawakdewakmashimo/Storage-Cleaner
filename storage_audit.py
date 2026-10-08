@@ -36,12 +36,25 @@ def compute_sha256(filepath):
         return None
 
 def resolve_target_dir(custom_path=None):
-    if custom_path and os.path.isdir(custom_path):
-        return os.path.abspath(custom_path)
+    if custom_path:
+        if os.path.isdir(custom_path):
+            return os.path.abspath(custom_path)
+        candidates_custom = [
+            os.path.abspath(custom_path),
+            os.path.join(str(Path.home()), "Desktop", custom_path),
+            os.path.join(str(Path.home()), "Downloads", custom_path),
+            os.path.join(str(Path.home()), "Documents", custom_path),
+            os.path.join(str(Path.home()), custom_path),
+        ]
+        for c in candidates_custom:
+            if os.path.isdir(c):
+                return c
     
     candidates = [
         os.path.abspath("Downloads_Lab"),
+        os.path.join(str(Path.home()), "Desktop", "Downloads_Lab"),
         os.path.join(str(Path.home()), "Downloads", "Downloads_Lab"),
+        os.path.join(str(Path.home()), "Documents", "Downloads_Lab"),
         os.path.join(os.path.dirname(__file__), "Downloads_Lab"),
         os.path.abspath(os.path.join("..", "Downloads_Lab")),
         os.path.join(str(Path.home()), "Downloads_Lab")

@@ -56,14 +56,33 @@ function computeFileHash(filePath) {
 }
 
 function resolveTargetDirectory(customArg) {
-  if (customArg && fs.existsSync(customArg) && fs.statSync(customArg).isDirectory()) {
-    return path.resolve(customArg);
+  if (customArg) {
+    const directPath = path.resolve(customArg);
+    if (fs.existsSync(directPath) && fs.statSync(directPath).isDirectory()) {
+      return directPath;
+    }
+
+    const candidatePaths = [
+      path.resolve(process.cwd(), customArg),
+      path.join(os.homedir(), 'Desktop', customArg),
+      path.join(os.homedir(), 'Downloads', customArg),
+      path.join(os.homedir(), 'Documents', customArg),
+      path.join(os.homedir(), customArg),
+      path.resolve(__dirname, customArg),
+    ];
+
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+        return p;
+      }
+    }
   }
 
   const potentialPaths = [
     path.resolve(process.cwd(), 'Downloads_Lab'),
-    path.join(os.homedir(), 'Downloads', 'Downloads_Lab'),
     path.join(os.homedir(), 'Desktop', 'Downloads_Lab'),
+    path.join(os.homedir(), 'Downloads', 'Downloads_Lab'),
+    path.join(os.homedir(), 'Documents', 'Downloads_Lab'),
     path.resolve(__dirname, 'Downloads_Lab'),
     path.resolve(process.cwd(), '..', 'Downloads_Lab'),
     path.join(os.homedir(), 'Downloads_Lab'),
@@ -1083,6 +1102,7 @@ function getHtmlContent() {
   <script>
     let currentData = null;
     let currentTab = 'giants';
+    let lastUploadedFiles = null;
 
     function showToast(message, type = 'info', duration = 6000) {
       const container = document.getElementById('toastContainer');
@@ -1318,33 +1338,48 @@ function getHtmlContent() {
       document.getElementById('pathModal').classList.remove('active');
     }
 
-    async function submitCustomPath() {
-      const val = document.getElementById('pathInputModal').value.trim();
-      if (!val) return;
+    async function submitCustomPath(customPath) {
+      const val = (customPath !== undefined ? customPath : document.getElementById('pathInputModal').value).trim();
+      if (!val) return false;
       closePathModal();
       showToast(\`Menghubungkan ke folder: \${val}...\`, 'info');
       
-      const res = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: val })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(\`Berhasil terhubung langsung ke harddisk: \${data.targetPath}\`, 'success');
-        currentData = data;
-        renderDashboard(data);
-      } else {
-        showToast(\`Gagal memindai folder: \${data.error}\`, 'info');
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: val })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(\`Berhasil terhubung langsung ke harddisk: \${data.targetPath}\`, 'success');
+          currentData = data;
+          renderDashboard(data);
+          return true;
+        } else {
+          showToast(\`Gagal memindai folder: \${data.error}\`, 'info');
+          return false;
+        }
+      } catch (err) {
+        showToast(\`Gagal menghubungi server: \${err.message}\`, 'info');
+        return false;
       }
     }
 
     // Clean modal
     document.getElementById('btnOpenCleanModal').onclick = () => {
-      if (!currentData || (currentData.totalRedundantFiles === 0 && (!currentData.tmpFiles || currentData.tmpFiles.length === 0))) {
-        showToast('Tidak ada file duplikat atau sampah yang perlu dibersihkan.', 'info');
+      if (!currentData || !currentData.targetPath) {
+        showToast('Silakan pilih folder terlebih dahulu untuk diaudit.', 'info');
         return;
       }
+      const duplicateCount = currentData.totalRedundantFiles || 0;
+      const tmpCount = (currentData.tmpFiles && currentData.tmpFiles.length) || 0;
+      if (duplicateCount === 0 && tmpCount === 0) {
+        showToast('✨ Folder sudah bersih! Tidak ada file duplikat atau sampah yang perlu dibersihkan.', 'success');
+        return;
+      }
+      document.getElementById('cleanRedundantCount').textContent = duplicateCount + tmpCount;
+      document.getElementById('cleanSavingsTotal').textContent = formatBytes(currentData.estimatedSavings || 0);
       document.getElementById('cleanModal').classList.add('active');
     };
 
@@ -1354,28 +1389,135 @@ function getHtmlContent() {
 
     async function executeClean() {
       closeCleanModal();
+
+      if (!currentData || !currentData.targetPath) {
+        showToast('Belum ada folder yang dipilih untuk dibersihkan.', 'info');
+        return;
+      }
+
+      if (currentData.isBrowserUpload) {
+        // Mode browser upload: buat & unduh skrip batch pembersih otomatis
+        const delCommands = [];
+        delCommands.push('@echo off');
+        delCommands.push('chcp 65001 >nul');
+        delCommands.push('echo ========================================================');
+        delCommands.push('echo   Storage Cleaner - Pembersih File Duplikat ^& Sampah');
+        delCommands.push('echo ========================================================');
+        delCommands.push('echo.');
+        delCommands.push('echo Menghapus file duplikat redundant...');
+
+        const rootName = currentData.targetPath.replace(' (Browser Upload)', '').trim();
+
+        if (currentData.duplicateGroups && currentData.duplicateGroups.length > 0) {
+          currentData.duplicateGroups.forEach(g => {
+            g.duplicates.forEach(d => {
+              const rel = d.path.replace(/\\/g, '/');
+              const cleanRel = (rootName && rel.startsWith(rootName + '/')) ? rel.slice(rootName.length + 1) : rel;
+              const winPath1 = rel.replace(/\//g, '\\\\');
+              const winPath2 = cleanRel.replace(/\//g, '\\\\');
+              
+              delCommands.push(\`if exist "%~dp0\${winPath2}" del /f /q "%~dp0\${winPath2}" 2>nul\`);
+              delCommands.push(\`if exist "\${winPath1}" del /f /q "\${winPath1}" 2>nul\`);
+              delCommands.push(\`if exist "\${winPath2}" del /f /q "\${winPath2}" 2>nul\`);
+            });
+          });
+        }
+
+        if (currentData.tmpFiles && currentData.tmpFiles.length > 0) {
+          delCommands.push('echo Menghapus file sampah (.tmp)...');
+          currentData.tmpFiles.forEach(t => {
+            const rel = t.path.replace(/\\/g, '/');
+            const cleanRel = (rootName && rel.startsWith(rootName + '/')) ? rel.slice(rootName.length + 1) : rel;
+            const winPath1 = rel.replace(/\//g, '\\\\');
+            const winPath2 = cleanRel.replace(/\//g, '\\\\');
+            
+            delCommands.push(\`if exist "%~dp0\${winPath2}" del /f /q "%~dp0\${winPath2}" 2>nul\`);
+            delCommands.push(\`if exist "\${winPath1}" del /f /q "\${winPath1}" 2>nul\`);
+            delCommands.push(\`if exist "\${winPath2}" del /f /q "\${winPath2}" 2>nul\`);
+          });
+        }
+
+        delCommands.push('echo.');
+        delCommands.push('echo Pembersihan selesai! Tekan tombol apa saja untuk keluar.');
+        delCommands.push('pause >nul');
+
+        const blob = new Blob([delCommands.join('\\r\\n')], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'clean_duplicates.bat';
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        showToast('Skrip "clean_duplicates.bat" berhasil diunduh! Jalankan file ini di folder target untuk menghapus file duplikat.', 'success', 8000);
+
+        // Update state dashboard secara instan
+        currentData.duplicateGroups = [];
+        currentData.tmpFiles = [];
+        currentData.totalRedundantFiles = 0;
+        currentData.estimatedSavings = 0;
+        renderDashboard(currentData);
+        return;
+      }
+
+      // Mode harddisk lokal via server backend
       showToast('Memulai pembersihan file duplikat & sampah di disk...', 'info');
-      
-      const res = await fetch('/api/clean', { method: 'POST' });
-      const result = await res.json();
-      
-      if (result.success) {
-        showToast(\`Pembersihan selesai! \${result.deletedCount} file dihapus. Ruang dihemat: \${formatBytes(result.freedBytes)}\`, 'success', 8000);
-        await loadStatus();
-      } else {
-        showToast(\`Gagal membersihkan: \${result.error}\`, 'info');
+      try {
+        const res = await fetch('/api/clean', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: currentData.targetPath })
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+          showToast(\`Pembersihan selesai! \${result.deletedCount} file berhasil dihapus. Ruang dihemat: \${formatBytes(result.freedBytes)}\`, 'success', 8000);
+          currentData = result;
+          renderDashboard(result);
+        } else {
+          showToast(\`Gagal membersihkan: \${result.error || 'Terjadi kesalahan sistem'}\`, 'info');
+        }
+      } catch (err) {
+        showToast(\`Gagal menghubungi server untuk pembersihan: \${err.message}\`, 'info');
       }
     }
 
+    document.getElementById('btnConfirmClean').onclick = executeClean;
+    window.closeCleanModal = closeCleanModal;
+    window.executeClean = executeClean;
+
     // Buttons bindings
     document.getElementById('btnRescan').onclick = async () => {
+      // 1. Jika mode upload browser dan file tersimpan di memori
+      if (currentData && currentData.isBrowserUpload && lastUploadedFiles && lastUploadedFiles.length > 0) {
+        showToast('Memindai ulang folder di browser...', 'info');
+        await processUploadedFolder(lastUploadedFiles);
+        return;
+      }
+
+      // 2. Jika ada path harddisk yang aktif
+      const targetPath = (currentData && !currentData.isBrowserUpload && currentData.targetPath) ? currentData.targetPath : '';
+
       showToast('Memindai ulang folder di harddisk...', 'info');
-      const res = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-      const data = await res.json();
-      if (data.success) {
-        currentData = data;
-        renderDashboard(data);
-        showToast('Pemindaian ulang selesai.', 'success');
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: targetPath })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentData = data;
+          renderDashboard(data);
+          showToast('Pemindaian ulang selesai.', 'success');
+        } else {
+          showToast(\`Gagal memindai ulang: \${data.error || 'Folder tidak ditemukan'}\`, 'info');
+        }
+      } catch (e) {
+        if (lastUploadedFiles && lastUploadedFiles.length > 0) {
+          await processUploadedFolder(lastUploadedFiles);
+        } else {
+          showToast('Gagal menghubungi server untuk memindai ulang.', 'info');
+        }
       }
     };
 
@@ -1385,13 +1527,17 @@ function getHtmlContent() {
     // Trigger OS Folder Browser via backend powershell
     async function triggerOSBrowse() {
       showToast('Membuka dialog pemilihan folder sistem...', 'info');
-      const res = await fetch('/api/browse-os', { method: 'POST' });
-      const data = await res.json();
-      if (data.success && data.path) {
-        showToast(\`Berhasil memilih folder: \${data.path}\`, 'success');
-        currentData = data;
-        renderDashboard(data);
-      } else if (!data.cancelled) {
+      try {
+        const res = await fetch('/api/browse-os', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.path) {
+          showToast(\`Berhasil memilih folder: \${data.path}\`, 'success');
+          currentData = data;
+          renderDashboard(data);
+        } else if (!data.cancelled) {
+          openPathModal();
+        }
+      } catch (e) {
         openPathModal();
       }
     }
@@ -1399,21 +1545,239 @@ function getHtmlContent() {
     document.getElementById('btnBrowseOS').onclick = triggerOSBrowse;
     document.getElementById('btnHeroBrowseOS').onclick = triggerOSBrowse;
 
+    async function processUploadedFolder(files) {
+      if (!files || files.length === 0) return;
+      lastUploadedFiles = files;
+
+      const firstRelPath = files[0].webkitRelativePath || '';
+      const rootDir = firstRelPath ? firstRelPath.split('/')[0] : '';
+      const folderName = rootDir || 'Folder Pilihan';
+
+      showToast(\`Memproses folder "\${folderName}" (\${files.length} file)...\`, 'info', 4000);
+
+      // Coba hubungkan langsung ke backend jika backend mengenali folder ini di harddisk
+      let backendSuccess = false;
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: folderName })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.targetPath) {
+            currentData = data;
+            renderDashboard(data);
+            showToast(\`Berhasil terhubung langsung ke harddisk: \${data.targetPath}\`, 'success', 6000);
+            backendSuccess = true;
+            return;
+          }
+        }
+      } catch (e) {
+        // Mode offline/standalone browser
+      }
+
+      if (backendSuccess) return;
+
+      // Jika backend tidak menemukan path lokal (atau dijalankan standalone di browser),
+      // lakukan audit mendalam langsung di browser!
+      showToast(\`Menganalisis file di browser & menghitung hash SHA-256...\`, 'info', 4000);
+
+      try {
+        let totalBytes = 0;
+        const giantFiles = [];
+        const tmpFiles = [];
+        const sizeMap = new Map();
+
+        for (const f of files) {
+          totalBytes += f.size;
+          const ext = (f.name.split('.').pop() || 'FILE').toUpperCase();
+          const relPath = f.webkitRelativePath || f.name;
+          const isTmp = f.name.toLowerCase().endsWith('.tmp') || f.name.startsWith('~');
+
+          const fileObj = {
+            name: f.name,
+            path: relPath,
+            size: f.size,
+            mtime: f.lastModified || Date.now(),
+            format: ext,
+            isTmp,
+            fileRef: f
+          };
+
+          if (isTmp) {
+            tmpFiles.push(fileObj);
+          }
+
+          if (f.size >= 2 * 1024 * 1024) { // >= 2 MB
+            giantFiles.push(fileObj);
+          }
+
+          if (f.size > 0) {
+            if (!sizeMap.has(f.size)) {
+              sizeMap.set(f.size, []);
+            }
+            sizeMap.get(f.size).push(fileObj);
+          }
+        }
+
+        giantFiles.sort((a, b) => b.size - a.size);
+
+        // Hitung SHA-256 hanya untuk file yang memiliki ukuran sama
+        const hashMap = new Map();
+        for (const [size, candidateList] of sizeMap.entries()) {
+          if (candidateList.length > 1) {
+            for (const item of candidateList) {
+              try {
+                const buffer = await item.fileRef.arrayBuffer();
+                const hashBuf = await crypto.subtle.digest('SHA-256', buffer);
+                const hashArr = Array.from(new Uint8Array(hashBuf));
+                const hashHex = hashArr.map(b => b.toString(16).padStart(2, '0')).join('');
+                item.hash = hashHex;
+                if (!hashMap.has(hashHex)) {
+                  hashMap.set(hashHex, []);
+                }
+                hashMap.get(hashHex).push(item);
+              } catch (hashErr) {
+                console.warn('Gagal menghitung hash untuk:', item.name, hashErr);
+              }
+            }
+          }
+        }
+
+        const duplicateGroups = [];
+        let totalReclaimableBytes = 0;
+        let totalRedundantFiles = 0;
+
+        for (const [hash, groupFiles] of hashMap.entries()) {
+          if (groupFiles.length > 1) {
+            groupFiles.sort((a, b) => {
+              const aScore = /copy|salinan|backup|\\(\\d+\\)|_v\\d+/i.test(a.name) ? 1 : 0;
+              const bScore = /copy|salinan|backup|\\(\\d+\\)|_v\\d+/i.test(b.name) ? 1 : 0;
+              if (aScore !== bScore) return aScore - bScore;
+              return a.mtime - b.mtime;
+            });
+
+            const original = groupFiles[0];
+            const duplicates = groupFiles.slice(1);
+            const groupReclaimable = duplicates.reduce((acc, f) => acc + f.size, 0);
+
+            totalReclaimableBytes += groupReclaimable;
+            totalRedundantFiles += duplicates.length;
+
+            duplicateGroups.push({
+              hash,
+              sizePerFile: original.size,
+              totalCopies: groupFiles.length,
+              original,
+              duplicates,
+              groupReclaimable,
+            });
+          }
+        }
+
+        duplicateGroups.sort((a, b) => b.groupReclaimable - a.groupReclaimable);
+
+        const duplicatePaths = new Set();
+        duplicateGroups.forEach(g => g.duplicates.forEach(d => duplicatePaths.add(d.path)));
+
+        let tmpOnlyBytes = 0;
+        for (const tmp of tmpFiles) {
+          if (!duplicatePaths.has(tmp.path)) {
+            tmpOnlyBytes += tmp.size;
+          }
+        }
+
+        const estimatedSavings = totalReclaimableBytes + tmpOnlyBytes;
+
+        currentData = {
+          targetPath: \`\${folderName} (Browser Upload)\`,
+          totalFiles: files.length,
+          totalBytes,
+          giantFiles,
+          tmpFiles,
+          duplicateGroups,
+          totalRedundantFiles,
+          totalReclaimableBytes,
+          tmpOnlyBytes,
+          estimatedSavings,
+          isBrowserUpload: true,
+        };
+
+        renderDashboard(currentData);
+        showToast(\`Audit folder "\${folderName}" selesai! \${giantFiles.length} file raksasa, \${duplicateGroups.length} grup duplikat.\`, 'success', 6000);
+      } catch (err) {
+        console.error('Audit folder error:', err);
+        showToast(\`Gagal memproses folder: \${err.message}\`, 'info');
+      }
+    }
+
     // Browser upload input
     const folderInput = document.getElementById('folderInput');
-    document.getElementById('btnTriggerUpload').onclick = () => folderInput.click();
-    document.getElementById('btnHeroUpload').onclick = () => folderInput.click();
+    function triggerFolderUpload() {
+      folderInput.value = '';
+      folderInput.click();
+    }
+    document.getElementById('btnTriggerUpload').onclick = triggerFolderUpload;
+    document.getElementById('btnHeroUpload').onclick = triggerFolderUpload;
 
     folderInput.onchange = (e) => {
       const files = Array.from(e.target.files);
-      if (files.length > 0) {
-        // In browser upload, get the relative path root
-        const rootDir = files[0].webkitRelativePath.split('/')[0];
-        showToast(\`Memproses folder \${rootDir} (\${files.length} file)...\`, 'info');
-        // If it's Downloads_Lab or has matching path, rescan backend
-        submitCustomPath();
+      if (files && files.length > 0) {
+        processUploadedFolder(files);
       }
     };
+
+    // Drag and drop support
+    ['dragenter', 'dragover'].forEach(eventName => {
+      window.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    window.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const dt = e.dataTransfer;
+      if (!dt) return;
+
+      const files = [];
+      if (dt.items && dt.items.length > 0) {
+        async function traverseEntry(entry) {
+          if (entry.isFile) {
+            return new Promise((resolve) => {
+              entry.file((file) => {
+                const rel = entry.fullPath ? entry.fullPath.replace(/^\\//, '') : file.name;
+                Object.defineProperty(file, 'webkitRelativePath', { value: rel });
+                files.push(file);
+                resolve();
+              }, () => resolve());
+            });
+          } else if (entry.isDirectory) {
+            return new Promise((resolve) => {
+              const reader = entry.createReader();
+              reader.readEntries(async (entries) => {
+                for (const child of entries) {
+                  await traverseEntry(child);
+                }
+                resolve();
+              }, () => resolve());
+            });
+          }
+        }
+        for (let i = 0; i < dt.items.length; i++) {
+          const entry = dt.items[i].webkitGetAsEntry ? dt.items[i].webkitGetAsEntry() : null;
+          if (entry) {
+            await traverseEntry(entry);
+          }
+        }
+      }
+      if (files.length > 0) {
+        processUploadedFolder(files);
+      } else if (dt.files && dt.files.length > 0) {
+        processUploadedFolder(Array.from(dt.files));
+      }
+    });
 
     // Initial load and show initial toasts
     window.addEventListener('DOMContentLoaded', async () => {
@@ -1469,7 +1833,13 @@ const server = http.createServer((req, res) => {
             res.end(JSON.stringify({ success: false, error: 'Path tidak valid atau tidak ditemukan' }));
             return;
           }
+        } else if (!currentTargetPath) {
+          const defaultResolved = resolveTargetDirectory();
+          if (defaultResolved) {
+            currentTargetPath = defaultResolved;
+          }
         }
+
         currentAnalysis = analyzeDirectory(currentTargetPath);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...currentAnalysis }));
@@ -1483,53 +1853,95 @@ const server = http.createServer((req, res) => {
 
   // API: POST /api/browse-os (Launches native Windows folder picker)
   if (req.method === 'POST' && pathname === '/api/browse-os') {
-    const psCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Pilih Folder untuk Diaudit'; if($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){ Write-Output $f.SelectedPath } else { Write-Output 'CANCELLED' }"`;
-    exec(psCmd, (err, stdout) => {
-      const selected = (stdout || '').trim();
-      if (!err && selected && selected !== 'CANCELLED' && fs.existsSync(selected)) {
-        currentTargetPath = selected;
-        currentAnalysis = analyzeDirectory(currentTargetPath);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, path: selected, ...currentAnalysis }));
-      } else {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, cancelled: true }));
-      }
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      const psCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Pilih Folder untuk Diaudit'; if($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){ Write-Output $f.SelectedPath } else { Write-Output 'CANCELLED' }"`;
+      exec(psCmd, (err, stdout) => {
+        const selected = (stdout || '').trim();
+        if (!err && selected && selected !== 'CANCELLED' && fs.existsSync(selected)) {
+          currentTargetPath = selected;
+          currentAnalysis = analyzeDirectory(currentTargetPath);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, path: selected, ...currentAnalysis }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, cancelled: true }));
+        }
+      });
     });
     return;
   }
 
   // API: POST /api/clean
   if (req.method === 'POST' && pathname === '/api/clean') {
-    let deletedCount = 0;
-    let freedBytes = 0;
-
-    for (const group of currentAnalysis.duplicateGroups) {
-      for (const dup of group.duplicates) {
-        try {
-          if (fs.existsSync(dup.path)) {
-            fs.unlinkSync(dup.path);
-            deletedCount++;
-            freedBytes += dup.size;
-          }
-        } catch (e) {}
-      }
-    }
-
-    for (const tmp of currentAnalysis.tmpFiles) {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
       try {
-        if (fs.existsSync(tmp.path)) {
-          fs.unlinkSync(tmp.path);
-          deletedCount++;
-          freedBytes += tmp.size;
+        const parsed = body ? JSON.parse(body) : {};
+        if (parsed.path) {
+          const resolved = resolveTargetDirectory(parsed.path);
+          if (resolved) {
+            currentTargetPath = resolved;
+          }
         }
-      } catch (e) {}
-    }
 
-    currentAnalysis = analyzeDirectory(currentTargetPath);
+        if (!currentTargetPath || !fs.existsSync(currentTargetPath)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Target folder tidak valid atau tidak ditemukan' }));
+          return;
+        }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, deletedCount, freedBytes, ...currentAnalysis }));
+        currentAnalysis = analyzeDirectory(currentTargetPath);
+
+        let deletedCount = 0;
+        let freedBytes = 0;
+        const deletedPaths = new Set();
+
+        if (currentAnalysis && currentAnalysis.duplicateGroups) {
+          for (const group of currentAnalysis.duplicateGroups) {
+            if (group && group.duplicates) {
+              for (const dup of group.duplicates) {
+                try {
+                  if (dup && dup.path && fs.existsSync(dup.path) && !deletedPaths.has(dup.path)) {
+                    fs.unlinkSync(dup.path);
+                    deletedPaths.add(dup.path);
+                    deletedCount++;
+                    freedBytes += (dup.size || 0);
+                  }
+                } catch (unlinkErr) {
+                  console.warn('Gagal menghapus file duplikat:', dup.path, unlinkErr.message);
+                }
+              }
+            }
+          }
+        }
+
+        if (currentAnalysis && currentAnalysis.tmpFiles) {
+          for (const tmp of currentAnalysis.tmpFiles) {
+            try {
+              if (tmp && tmp.path && fs.existsSync(tmp.path) && !deletedPaths.has(tmp.path)) {
+                fs.unlinkSync(tmp.path);
+                deletedPaths.add(tmp.path);
+                deletedCount++;
+                freedBytes += (tmp.size || 0);
+              }
+            } catch (tmpErr) {
+              console.warn('Gagal menghapus file sampah:', tmp.path, tmpErr.message);
+            }
+          }
+        }
+
+        currentAnalysis = analyzeDirectory(currentTargetPath);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, deletedCount, freedBytes, ...currentAnalysis }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
     return;
   }
 
