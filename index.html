@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storage Audit & Cleaner - Direct Execution</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070d18;
+      --card-bg: #0f172a;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-inner: #131d31;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-sub: #64748b;
+      
+      --accent-blue: #0284c7;
+      --accent-cyan: #38bdf8;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-rose: #e11d48;
+      --accent-purple: #a855f7;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 1.5rem 2rem 4rem 2rem;
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    /* Top Navigation Header */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .logo-icon-box {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.35);
+    }
+
+    .logo-icon-box svg {
+      width: 24px;
+      height: 24px;
+      fill: #ffffff;
+    }
+
+    .logo-titles {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .main-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+
+    .badge-execution {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.15rem 0.55rem;
+      border-radius: 9999px;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      font-weight: 500;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.55rem 1.05rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .btn-secondary {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary:hover {
+      background: #283548;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-clean {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
+    }
+
+    .btn-clean:hover {
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      box-shadow: 0 6px 18px rgba(225, 29, 72, 0.5);
+      transform: translateY(-1px);
+    }
+
+    /* Target Harddisk Bar */
+    .target-bar {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .target-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .folder-icon-glow {
+      font-size: 1.3rem;
+    }
+
+    .target-text-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .target-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-sub);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .target-path {
+      font-size: 0.88rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--accent-cyan);
+    }
+
+    .target-actions {
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    .btn-target-blue {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .btn-target-blue:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-target-green {
+      background: #059669;
+      color: #ffffff;
+    }
+
+    .btn-target-green:hover {
+      background: #047857;
+    }
+
+    .btn-target-gray {
+      background: #334155;
+      color: #e2e8f0;
+    }
+
+    .btn-target-gray:hover {
+      background: #475569;
+    }
+
+    /* Empty State Hero Area (Image 2) */
+    .empty-hero {
+      border: 1px dashed rgba(255, 255, 255, 0.18);
+      border-radius: 14px;
+      padding: 3rem 2rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      background: rgba(15, 23, 42, 0.3);
+      display: none;
+    }
+
+    .empty-hero.active {
+      display: block;
+    }
+
+    .empty-hero-icon {
+      font-size: 3.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .empty-hero-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-hero-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 1.5rem auto;
+      line-height: 1.6;
+    }
+
+    .empty-hero-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    /* 4 Stat Cards */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+
+    .stat-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .stat-icon {
+      font-size: 1.1rem;
+    }
+
+    .stat-val {
+      font-size: 1.95rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.1;
+      margin-bottom: 0.55rem;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-footer {
+      font-size: 0.72rem;
+      color: var(--text-sub);
+      font-weight: 500;
+    }
+
+    /* Section Table Card */
+    .section-card {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .section-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.2rem;
+    }
+
+    .section-header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .section-header-title h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pill-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.15rem 0.6rem;
+      border-radius: 9999px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+    }
+
+    .tab-pills {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      padding: 0.3rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .search-input-box {
+      position: relative;
+      width: 250px;
+    }
+
+    .search-input-box input {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.8rem;
+      color: #ffffff;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input-box input:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    .search-input-box input::placeholder {
+      color: var(--text-sub);
+    }
+
+    /* Table Styles */
+    .table-container {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      padding: 0.75rem 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    td {
+      font-size: 0.82rem;
+      padding: 0.85rem 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .file-cell {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .file-icon {
+      font-size: 1.15rem;
+    }
+
+    .file-name {
+      font-weight: 600;
+      color: #f1f5f9;
+      display: inline-block;
+    }
+
+    .file-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text-sub);
+      max-width: 480px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-size {
+      font-weight: 700;
+      color: #f8fafc;
+      font-size: 0.83rem;
+      white-space: nowrap;
+    }
+
+    .format-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      letter-spacing: 0.03em;
+    }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fbbf24;
+      white-space: nowrap;
+    }
+
+    .status-badge-dup {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #f87171;
+    }
+
+    .status-badge-keep {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #34d399;
+    }
+
+    /* Toast Notifications at Bottom Right (Image 3) */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 9999;
+    }
+
+    .toast {
+      background: #111b2b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-size: 0.78rem;
+      color: #e2e8f0;
+      min-width: 320px;
+      max-width: 440px;
+      animation: slideIn 0.3s ease forwards;
+    }
+
+    .toast-info {
+      border-left: 3px solid #38bdf8;
+    }
+
+    .toast-success {
+      border-left: 3px solid #10b981;
+    }
+
+    .toast-icon {
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 520px;
+      padding: 1.75rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .modal-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+
+    .modal-input {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ffffff;
+      margin-bottom: 1.5rem;
+      outline: none;
+    }
+
+    .modal-input:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 992px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .target-bar { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 1rem; }
+      .top-bar { flex-direction: column; align-items: flex-start; gap: 1rem; }
+      .stats-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    
+    <!-- Top Bar Navigation -->
+    <header class="top-bar">
+      <div class="logo-group">
+        <div class="logo-icon-box">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div class="logo-titles">
+          <div class="title-row">
+            <h1 class="main-title">Storage Audit & Cleaner</h1>
+            <span class="badge-execution">Direct Execution</span>
+          </div>
+          <p class="subtitle">Pembersihan Storage Riil di Harddisk Komputer</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button class="btn btn-secondary" id="btnRescan">
+          <span>🔄</span> Pindai Ulang
+        </button>
+        <button class="btn btn-clean" id="btnOpenCleanModal">
+          <span>🧹</span> Bersihkan Duplikat & Sampah
+        </button>
+      </div>
+    </header>
+
+    <!-- Target Harddisk Active Bar -->
+    <div class="target-bar" id="targetBar">
+      <div class="target-info">
+        <span class="folder-icon-glow">📁</span>
+        <div class="target-text-col">
+          <span class="target-label">TARGET HARDDISK AKTIF:</span>
+          <span class="target-path" id="activeTargetPath">Memuat...</span>
+        </div>
+      </div>
+      <div class="target-actions">
+        <button class="btn btn-target-blue" id="btnBrowseOS">
+          <span>📁</span> Browse Folder (Dialog OS)
+        </button>
+        <button class="btn btn-target-green" id="btnTriggerUpload">
+          <span>⬆️</span> Pilih / Upload Folder
+        </button>
+        <button class="btn btn-target-gray" id="btnInputPath">
+          <span>📝</span> Input Path
+        </button>
+      </div>
+    </div>
+
+    <!-- Hidden input for webkitdirectory folder upload -->
+    <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
+
+    <!-- Empty State Hero Area (shown when no folder) -->
+    <div class="empty-hero" id="emptyHero">
+      <div class="empty-hero-icon">📁</div>
+      <h2 class="empty-hero-title">Silakan Pilih Folder untuk Memulai Audit</h2>
+      <p class="empty-hero-desc">
+        Belum ada folder yang dipilih. Silakan pilih folder di harddisk komputer Anda yang ingin dipindai, dianalisis file raksasanya, dan dibersihkan duplikatnya secara riil tanpa membuat salinan.
+      </p>
+      <div class="empty-hero-buttons">
+        <button class="btn btn-target-blue" id="btnHeroBrowseOS">
+          <span>📁</span> Browse Folder (Dialog Windows)
+        </button>
+        <button class="btn btn-target-green" id="btnHeroUpload">
+          <span>⬆️</span> Pilih / Upload Folder
+        </button>
+        <button class="btn btn-target-gray" id="btnHeroPath">
+          <span>📝</span> Ketik Path Manual
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Stats Cards Grid -->
+    <div class="stats-row" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">TOTAL FILE DI-SCAN</span>
+          <span class="stat-icon" style="color: #f59e0b;">📁</span>
+        </div>
+        <div class="stat-val" id="statTotalFiles">-</div>
+        <div class="stat-footer">STG-01: Memindai seluruh file rekursif</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">TOTAL KAPASITAS FOLDER</span>
+          <span class="stat-icon" style="color: #c084fc;">💾</span>
+        </div>
+        <div class="stat-val" id="statTotalBytes">-</div>
+        <div class="stat-footer">Ukuran data fisik asli di disk</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">FILE RAKSASA (≥ 2 MB)</span>
+          <span class="stat-icon" style="color: #f59e0b;">⚠️</span>
+        </div>
+        <div class="stat-val" id="statGiantFiles" style="color: #f59e0b;">-</div>
+        <div class="stat-footer">STG-03: Terdeteksi file boros kuota</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">POTENSI HEMAT RUANG</span>
+          <span class="stat-icon" style="color: #38bdf8;">✨</span>
+        </div>
+        <div class="stat-val" id="statSavings" style="color: #38bdf8;">-</div>
+        <div class="stat-footer">Duplikat identik & file sampah .tmp</div>
+      </div>
+    </div>
+
+    <!-- Main Table Card Section -->
+    <div class="section-card">
+      <div class="section-toolbar">
+        <div class="section-header-title">
+          <h2 id="tableSectionTitle">📦 <span id="titleText">Daftar File Raksasa (≥ 2 MB)</span></h2>
+          <span class="pill-badge" id="pillBadgeCount">0 file</span>
+        </div>
+
+        <div class="tab-pills">
+          <button class="tab-btn active" id="tabGiants" onclick="switchView('giants')">File Raksasa (≥ 2 MB)</button>
+          <button class="tab-btn" id="tabDuplicates" onclick="switchView('duplicates')">Kelompok Duplikat SHA-256</button>
+        </div>
+
+        <div class="search-input-box">
+          <input type="text" id="searchInput" placeholder="Cari file raksasa..." oninput="handleSearch()">
+        </div>
+      </div>
+
+      <div class="table-container">
+        <!-- Giant Files Table -->
+        <table id="tableGiants">
+          <thead>
+            <tr>
+              <th style="width: 38%;">NAMA FILE</th>
+              <th style="width: 32%;">PATH LOKASI HARDDISK</th>
+              <th style="width: 12%;">UKURAN</th>
+              <th style="width: 8%;">FORMAT</th>
+              <th style="width: 10%;">STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="giantsTableBody">
+          </tbody>
+        </table>
+
+        <!-- Duplicate Groups Table -->
+        <table id="tableDuplicates" style="display: none;">
+          <thead>
+            <tr>
+              <th style="width: 35%;">NAMA FILE</th>
+              <th style="width: 30%;">PATH LOKASI HARDDISK</th>
+              <th style="width: 12%;">UKURAN</th>
+              <th style="width: 10%;">AKSI REKOMENDASI</th>
+              <th style="width: 13%;">POTENSI HEMAT</th>
+            </tr>
+          </thead>
+          <tbody id="duplicatesTableBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Manual Path Input Modal -->
+  <div class="modal-backdrop" id="pathModal">
+    <div class="modal-card">
+      <div class="modal-title"><span>📝</span> Input Path Folder Target</div>
+      <p class="modal-desc">Ketik atau tempel alamat path direktori di harddisk yang ingin dipindai secara langsung:</p>
+      <input type="text" class="modal-input" id="pathInputModal" placeholder="C:\\Users\\Student\\Downloads\\Downloads_Lab">
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closePathModal()">Batal</button>
+        <button class="btn btn-target-blue" onclick="submitCustomPath()">Pindai Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clean Confirmation Modal -->
+  <div class="modal-backdrop" id="cleanModal">
+    <div class="modal-card">
+      <div class="modal-title"><span>🧹</span> Konfirmasi Pembersihan Duplikat & Sampah</div>
+      <p class="modal-desc">
+        Apakah Anda yakin ingin menghapus <strong id="cleanRedundantCount">0</strong> file salinan duplikat dan file sampah <code style="color: #fbbf24;">.tmp</code>?<br><br>
+        Sistem akan <strong>mempertahankan 1 file asli per kelompok</strong> dan menghemat ruang penyimpanan sekitar <strong id="cleanSavingsTotal" style="color: #34d399;">0 MB</strong> secara permanen.
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeCleanModal()">Batal</button>
+        <button class="btn btn-clean" id="btnConfirmClean" onclick="executeClean()">Ya, Bersihkan Sekarang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    let currentData = null;
+    let currentTab = 'giants';
+
+    function showToast(message, type = 'info', duration = 6000) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + (type === 'success' ? 'toast-success' : 'toast-info');
+      
+      const icon = type === 'success' ? '✔️' : 'ℹ️';
+      toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span>${message}</span>
+      `;
+      
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      const val = bytes / Math.pow(1024, i);
+      return `${val.toFixed(2)} ${units[i]}`;
+    }
+
+    function getFileIcon(name) {
+      const lower = name.toLowerCase();
+      if (lower.endsWith('.pdf')) return '📄';
+      if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) return '🗜️';
+      if (lower.endsWith('.pptx') || lower.endsWith('.ppt')) return '📁';
+      if (lower.endsWith('.mp4') || lower.endsWith('.m4a') || lower.endsWith('.mp3')) return '🎞️';
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return '📊';
+      if (lower.endsWith('.docx') || lower.endsWith('.doc')) return '📝';
+      if (lower.endsWith('.jpg') || lower.endsWith('.png') || lower.endsWith('.ico')) return '🖼️';
+      if (lower.endsWith('.exe')) return '⚙️';
+      return '📄';
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        currentData = data;
+        renderDashboard(data);
+      } catch (e) {
+        console.error('Gagal memuat status:', e);
+      }
+    }
+
+    function renderDashboard(data) {
+      const pathEl = document.getElementById('activeTargetPath');
+      const emptyHero = document.getElementById('emptyHero');
+      
+      if (!data.targetPath) {
+        pathEl.textContent = 'Belum Ada Folder yang Dipilih';
+        pathEl.style.color = '#94a3b8';
+        pathEl.style.fontStyle = 'italic';
+        emptyHero.classList.add('active');
+        document.getElementById('statTotalFiles').textContent = '-';
+        document.getElementById('statTotalBytes').textContent = '-';
+        document.getElementById('statGiantFiles').textContent = '-';
+        document.getElementById('statSavings').textContent = '-';
+        document.getElementById('giantsTableBody').innerHTML = '';
+        return;
+      }
+
+      emptyHero.classList.remove('active');
+      pathEl.textContent = data.targetPath;
+      pathEl.style.color = '#38bdf8';
+      pathEl.style.fontStyle = 'normal';
+
+      // 4 Metric cards
+      document.getElementById('statTotalFiles').textContent = data.totalFiles;
+      document.getElementById('statTotalBytes').textContent = formatBytes(data.totalBytes);
+      document.getElementById('statGiantFiles').textContent = data.giantFiles.length;
+      document.getElementById('statSavings').textContent = formatBytes(data.estimatedSavings);
+
+      document.getElementById('pillBadgeCount').textContent = `${data.giantFiles.length} file`;
+
+      document.getElementById('cleanRedundantCount').textContent = data.totalRedundantFiles + (data.tmpFiles ? data.tmpFiles.length : 0);
+      document.getElementById('cleanSavingsTotal').textContent = formatBytes(data.estimatedSavings);
+
+      renderGiantsTable(data.giantFiles);
+      renderDuplicatesTable(data.duplicateGroups);
+    }
+
+    function renderGiantsTable(giantFiles) {
+      const tbody = document.getElementById('giantsTableBody');
+      const search = (document.getElementById('searchInput').value || '').toLowerCase();
+      
+      const filtered = giantFiles.filter(f => f.name.toLowerCase().includes(search) || f.path.toLowerCase().includes(search));
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Tidak ditemukan file raksasa (≥ 2 MB).</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(f => `
+        <tr>
+          <td>
+            <div class="file-cell">
+              <span class="file-icon">${getFileIcon(f.name)}</span>
+              <span class="file-name">${f.name}</span>
+            </div>
+          </td>
+          <td>
+            <div class="file-path" title="${f.path}">${f.path}</div>
+          </td>
+          <td>
+            <span class="file-size">${formatBytes(f.size)}</span>
+          </td>
+          <td>
+            <span class="format-badge">${f.format}</span>
+          </td>
+          <td>
+            <span class="status-badge">FILE RAKSASA</span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderDuplicatesTable(groups) {
+      const tbody = document.getElementById('duplicatesTableBody');
+      const search = (document.getElementById('searchInput').value || '').toLowerCase();
+
+      if (!groups || groups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Tidak ditemukan file duplikat (SHA-256 identik).</td></tr>';
+        return;
+      }
+
+      let html = '';
+      groups.forEach((g, gIdx) => {
+        if (g.original.name.toLowerCase().includes(search) || g.duplicates.some(d => d.name.toLowerCase().includes(search))) {
+          html += `
+            <tr style="background: rgba(16, 185, 129, 0.03);">
+              <td>
+                <div class="file-cell">
+                  <span class="file-icon">🛡️</span>
+                  <div>
+                    <span class="file-name">${g.original.name}</span>
+                    <div style="font-size: 0.68rem; color: #34d399;">Grup #${gIdx + 1} &bull; File Utama</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="file-path" title="${g.original.path}">${g.original.path}</div></td>
+              <td><span class="file-size">${formatBytes(g.original.size)}</span></td>
+              <td><span class="status-badge-keep status-badge">PERTAHANKAN</span></td>
+              <td><span style="color: #64748b; font-size: 0.75rem;">-</span></td>
+            </tr>
+          `;
+
+          g.duplicates.forEach(d => {
+            html += `
+              <tr>
+                <td>
+                  <div class="file-cell" style="padding-left: 1.2rem;">
+                    <span class="file-icon">📑</span>
+                    <span class="file-name" style="color: #cbd5e1;">${d.name}</span>
+                  </div>
+                </td>
+                <td><div class="file-path" title="${d.path}">${d.path}</div></td>
+                <td><span class="file-size">${formatBytes(d.size)}</span></td>
+                <td><span class="status-badge-dup status-badge">HAPUS SALINAN</span></td>
+                <td><strong style="color: #34d399;">+${formatBytes(d.size)}</strong></td>
+              </tr>
+            `;
+          });
+        }
+      });
+
+      tbody.innerHTML = html || '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Tidak ada hasil yang cocok dengan pencarian.</td></tr>';
+    }
+
+    function switchView(tab) {
+      currentTab = tab;
+      const tabG = document.getElementById('tabGiants');
+      const tabD = document.getElementById('tabDuplicates');
+      const tblG = document.getElementById('tableGiants');
+      const tblD = document.getElementById('tableDuplicates');
+      const titleText = document.getElementById('titleText');
+      const searchInput = document.getElementById('searchInput');
+
+      if (tab === 'giants') {
+        tabG.classList.add('active');
+        tabD.classList.remove('active');
+        tblG.style.display = '';
+        tblD.style.display = 'none';
+        titleText.textContent = 'Daftar File Raksasa (≥ 2 MB)';
+        searchInput.placeholder = 'Cari file raksasa...';
+        if (currentData) {
+          document.getElementById('pillBadgeCount').textContent = `${currentData.giantFiles.length} file`;
+          renderGiantsTable(currentData.giantFiles);
+        }
+      } else {
+        tabD.classList.add('active');
+        tabG.classList.remove('active');
+        tblD.style.display = '';
+        tblG.style.display = 'none';
+        titleText.textContent = 'Daftar Kelompok Duplikat (SHA-256 Identik)';
+        searchInput.placeholder = 'Cari file duplikat...';
+        if (currentData) {
+          document.getElementById('pillBadgeCount').textContent = `${currentData.duplicateGroups.length} grup`;
+          renderDuplicatesTable(currentData.duplicateGroups);
+        }
+      }
+    }
+
+    function handleSearch() {
+      if (!currentData) return;
+      if (currentTab === 'giants') {
+        renderGiantsTable(currentData.giantFiles);
+      } else {
+        renderDuplicatesTable(currentData.duplicateGroups);
+      }
+    }
+
+    function openPathModal() {
+      document.getElementById('pathModal').classList.add('active');
+      const input = document.getElementById('pathInputModal');
+      input.value = currentData ? (currentData.targetPath || '') : '';
+      input.focus();
+    }
+
+    function closePathModal() {
+      document.getElementById('pathModal').classList.remove('active');
+    }
+
+    async function submitCustomPath() {
+      const val = document.getElementById('pathInputModal').value.trim();
+      if (!val) return;
+      closePathModal();
+      showToast(`Menghubungkan ke folder: ${val}...`, 'info');
+      
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: val })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Berhasil terhubung langsung ke harddisk: ${data.targetPath}`, 'success');
+        currentData = data;
+        renderDashboard(data);
+      } else {
+        showToast(`Gagal memindai folder: ${data.error}`, 'info');
+      }
+    }
+
+    document.getElementById('btnOpenCleanModal').onclick = () => {
+      if (!currentData || (currentData.totalRedundantFiles === 0 && (!currentData.tmpFiles || currentData.tmpFiles.length === 0))) {
+        showToast('Tidak ada file duplikat atau sampah yang perlu dibersihkan.', 'info');
+        return;
+      }
+      document.getElementById('cleanModal').classList.add('active');
+    };
+
+    function closeCleanModal() {
+      document.getElementById('cleanModal').classList.remove('active');
+    }
+
+    async function executeClean() {
+      closeCleanModal();
+      showToast('Memulai pembersihan file duplikat & sampah di disk...', 'info');
+      
+      const res = await fetch('/api/clean', { method: 'POST' });
+      const result = await res.json();
+      
+      if (result.success) {
+        showToast(`Pembersihan selesai! ${result.deletedCount} file dihapus. Ruang dihemat: ${formatBytes(result.freedBytes)}`, 'success', 8000);
+        await loadStatus();
+      } else {
+        showToast(`Gagal membersihkan: ${result.error}`, 'info');
+      }
+    }
+
+    document.getElementById('btnRescan').onclick = async () => {
+      showToast('Memindai ulang folder di harddisk...', 'info');
+      const res = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.success) {
+        currentData = data;
+        renderDashboard(data);
+        showToast('Pemindaian ulang selesai.', 'success');
+      }
+    };
+
+    document.getElementById('btnInputPath').onclick = openPathModal;
+    document.getElementById('btnHeroPath').onclick = openPathModal;
+
+    async function triggerOSBrowse() {
+      showToast('Membuka dialog pemilihan folder sistem...', 'info');
+      const res = await fetch('/api/browse-os', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.path) {
+        showToast(`Berhasil memilih folder: ${data.path}`, 'success');
+        currentData = data;
+        renderDashboard(data);
+      } else if (!data.cancelled) {
+        openPathModal();
+      }
+    }
+
+    document.getElementById('btnBrowseOS').onclick = triggerOSBrowse;
+    document.getElementById('btnHeroBrowseOS').onclick = triggerOSBrowse;
+
+    const folderInput = document.getElementById('folderInput');
+    document.getElementById('btnTriggerUpload').onclick = () => folderInput.click();
+    document.getElementById('btnHeroUpload').onclick = () => folderInput.click();
+
+    folderInput.onchange = (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        const rootDir = files[0].webkitRelativePath.split('/')[0];
+        showToast(`Memproses folder ${rootDir} (${files.length} file)...`, 'info');
+        submitCustomPath();
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      showToast("Mencari lokasi fisik folder 'Downloads_Lab' di harddisk...", "info", 5000);
+      await loadStatus();
+      if (currentData && currentData.targetPath) {
+        setTimeout(() => {
+          showToast(`Berhasil terhubung langsung ke harddisk: ${currentData.targetPath}`, "success", 7000);
+        }, 1200);
+      }
+    });
+  </script>
+</body>
+</html>
